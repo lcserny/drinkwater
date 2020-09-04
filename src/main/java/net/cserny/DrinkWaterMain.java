@@ -50,7 +50,7 @@ public class DrinkWaterMain {
         executorService.scheduleAtFixedRate(() -> {
             try {
                 LocalDateTime current = LocalDateTime.now();
-                if (ChronoUnit.HOURS.between(prevHour, current) > 1) {
+                if (ChronoUnit.HOURS.between(prevHour, current) >= 1) {
                     prevHour = current;
                     trayIcon.displayMessage("Drink Water Notification",
                             "An hour has passed, you need to drink more water!", TrayIcon.MessageType.INFO);

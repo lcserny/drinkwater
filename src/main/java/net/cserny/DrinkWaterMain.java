@@ -17,9 +17,12 @@ public class DrinkWaterMain {
     private static final Logger LOGGER = Logger.getLogger(DrinkWaterMain.class.getSimpleName());
     private static final ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
 
-    private LocalDateTime prevHour = LocalDateTime.now();
-
     public static void main(String[] args) {
+        initLogger();
+        new DrinkWaterMain().run();
+    }
+
+    private static void initLogger() {
         try {
             FileHandler fileLogHandler = new FileHandler("drinkwater.log");
             fileLogHandler.setFormatter(new SimpleFormatter());
@@ -27,18 +30,17 @@ public class DrinkWaterMain {
         } catch (IOException e) {
             LOGGER.log(Level.WARNING, e.getMessage(), e);
         }
-
-        new DrinkWaterMain().run();
     }
 
     private void run() {
         LOGGER.info("Starting application");
+        TrayIcon trayIcon = produceDrinkWaterTrayIcon();
+        addToSystem(trayIcon);
+        executorService.scheduleAtFixedRate(new DrinkWaterThread(trayIcon, this::shutdownApplication),
+                0, 1, TimeUnit.SECONDS);
+    }
 
-        Image icon = Toolkit.getDefaultToolkit().getImage(
-                Thread.currentThread().getContextClassLoader().getResource("icon.png"));
-        TrayIcon trayIcon = new TrayIcon(icon, "Drink More Water");
-        trayIcon.setImageAutoSize(true);
-
+    private void addToSystem(TrayIcon trayIcon) {
         try {
             SystemTray tray = SystemTray.getSystemTray();
             tray.add(trayIcon);
@@ -46,20 +48,50 @@ public class DrinkWaterMain {
             LOGGER.log(Level.SEVERE, e.getMessage(), e);
             System.exit(1);
         }
+    }
 
-        executorService.scheduleAtFixedRate(() -> {
+    private TrayIcon produceDrinkWaterTrayIcon() {
+        Image icon = Toolkit.getDefaultToolkit().getImage(
+                Thread.currentThread().getContextClassLoader().getResource("glass.png"));
+        TrayIcon trayIcon = new TrayIcon(icon, "Drink More Water");
+        trayIcon.setImageAutoSize(true);
+        PopupMenu menu = new PopupMenu();
+        MenuItem exitMenuItem = new MenuItem("Exit");
+        exitMenuItem.addActionListener(e -> shutdownApplication());
+        menu.add(exitMenuItem);
+        trayIcon.setPopupMenu(menu);
+        return trayIcon;
+    }
+
+    private void shutdownApplication() {
+        LOGGER.info("Exiting application");
+        System.exit(1);
+    }
+
+    private static class DrinkWaterThread implements Runnable {
+
+        private final TrayIcon trayIcon;
+        private final Runnable shutdownApplication;
+        private LocalDateTime prevHour = LocalDateTime.now();
+
+        public DrinkWaterThread(TrayIcon trayIcon, Runnable shutdownApplication) {
+            this.trayIcon = trayIcon;
+            this.shutdownApplication = shutdownApplication;
+        }
+
+        @Override
+        public void run() {
             try {
                 LocalDateTime current = LocalDateTime.now();
                 if (ChronoUnit.HOURS.between(prevHour, current) >= 1) {
                     prevHour = current;
                     trayIcon.displayMessage("Drink Water Notification",
-                            "An hour has passed, you need to drink more water!", TrayIcon.MessageType.INFO);
+                            "An hour has passed, you need to drink some water!", TrayIcon.MessageType.INFO);
                 }
             } catch (Exception e) {
                 LOGGER.log(Level.SEVERE, e.getMessage(), e);
-                executorService.shutdownNow();
-                LOGGER.info("Exiting application");
+                shutdownApplication.run();
             }
-        }, 0, 1, TimeUnit.SECONDS);
+        }
     }
 }

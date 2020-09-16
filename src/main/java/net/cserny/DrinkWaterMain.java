@@ -7,6 +7,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.FileHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -16,6 +17,8 @@ public class DrinkWaterMain {
 
     private static final Logger LOGGER = Logger.getLogger(DrinkWaterMain.class.getSimpleName());
     private static final ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
+
+    private final AtomicBoolean paused = new AtomicBoolean();
 
     public static void main(String[] args) {
         initLogger();
@@ -36,8 +39,8 @@ public class DrinkWaterMain {
         LOGGER.info("Starting application");
         TrayIcon trayIcon = produceDrinkWaterTrayIcon();
         addToSystem(trayIcon);
-        executorService.scheduleAtFixedRate(new DrinkWaterThread(trayIcon, this::shutdownApplication),
-                0, 1, TimeUnit.SECONDS);
+        executorService.scheduleAtFixedRate(new DrinkWaterThread(trayIcon, this::shutdownApplication, paused),
+                0, 10, TimeUnit.SECONDS);
     }
 
     private void addToSystem(TrayIcon trayIcon) {
@@ -59,8 +62,22 @@ public class DrinkWaterMain {
         MenuItem exitMenuItem = new MenuItem("Exit");
         exitMenuItem.addActionListener(e -> shutdownApplication());
         menu.add(exitMenuItem);
+        CheckboxMenuItem pauseMenuItem = new CheckboxMenuItem("Pause");
+        pauseMenuItem.addActionListener(e -> pauseNotifications(pauseMenuItem));
+        menu.add(pauseMenuItem);
         trayIcon.setPopupMenu(menu);
         return trayIcon;
+    }
+
+    private void pauseNotifications(CheckboxMenuItem pauseMenuItem) {
+        boolean initialEnabledState = pauseMenuItem.getState();
+        if (initialEnabledState) {
+            paused.set(false);
+            pauseMenuItem.setState(false);
+        } else {
+            paused.set(true);
+            pauseMenuItem.setState(true);
+        }
     }
 
     private void shutdownApplication() {
@@ -72,16 +89,22 @@ public class DrinkWaterMain {
 
         private final TrayIcon trayIcon;
         private final Runnable shutdownApplication;
+        private final AtomicBoolean paused;
         private LocalDateTime prevHour = LocalDateTime.now();
 
-        public DrinkWaterThread(TrayIcon trayIcon, Runnable shutdownApplication) {
+        public DrinkWaterThread(TrayIcon trayIcon, Runnable shutdownApplication, AtomicBoolean paused) {
             this.trayIcon = trayIcon;
             this.shutdownApplication = shutdownApplication;
+            this.paused = paused;
         }
 
         @Override
         public void run() {
             try {
+                if (paused.get()) {
+                    return;
+                }
+
                 LocalDateTime current = LocalDateTime.now();
                 if (ChronoUnit.HOURS.between(prevHour, current) >= 1) {
                     prevHour = current;
